@@ -11,13 +11,12 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <sys/wait.h>
 
 #define MYPORT "4950"    // the port users will be connecting to
 
 #define MAXBUFLEN 100*101*sizeof(int)
 
-
-Window w;
 
 typedef struct pixelarray{
     int pixels[100][100];
@@ -46,7 +45,8 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-void udpserver(void* arg){
+void udpserver(Window w){
+    printf("running udpserver");
     Display * d;
     XEvent e;
     int screen;
@@ -58,33 +58,40 @@ void udpserver(void* arg){
     }
 
     screen = DefaultScreen(d);
-    //w = XCreateSimpleWindow(d, RootWindow(d,screen), 10, 10, 100, 100, 1, BlackPixel(d,screen), WhitePixel(d,screen));
-	XSelectInput(d, w, ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | EnterWindowMask | LeaveWindowMask | PointerMotionMask);
-	XMapWindow(d,w);  
+    //w = XCreateSimpleWindow(d, RootWindow(d,screen), 10, 10, 100, 100, 1, BlackPixel(d,screen), WhitePixel(d,screen));*/
+XSelectInput(d, w, ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | EnterWindowMask | LeaveWindowMask | PointerMotionMask);
+XMapWindow(d,w);  
     int s;
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 
-    struct addrinfo hints, *result;
+    struct addrinfo hints, *result, *p;
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
-
-    s = getaddrinfo(NULL, "1234", &hints, &result);
+    printf("hello\n");
+    s = getaddrinfo(NULL, "9001", &hints, &result);
     if (s != 0) {
             fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
             exit(1);
     }
     int optval = 1;
-    setsockopt(sock_fd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
-    if (bind(sock_fd, result->ai_addr, result->ai_addrlen) != 0) {
-        perror("bind()");
-        exit(1);
+    int ctr = 0;
+    ctr++;
+    printf("asdf: %d\n", ctr);
+    setsockopt(sock_fd, SOL_SOCKET, SO_REUSEPORT | SO_REUSEADDR, &optval, sizeof(optval));
+    int ret = bind(sock_fd, result->ai_addr, result->ai_addrlen);
+    printf("ret %d\n",ret); 
+    if (ret != 0) {
+        close(sock_fd);
+        ctr++;
+
+        perror("bind() heyy");
     }
 
     if (listen(sock_fd, 10) != 0) {
+        close(sock_fd);
         perror("listen()");
-        exit(1);
     }
 
     struct sockaddr_in *result_addr = (struct sockaddr_in *) result->ai_addr;
@@ -126,7 +133,7 @@ void udpserver(void* arg){
         }
     }
     close(sock_fd);
-	/*
+/*
     char buffer[1000] = "Hello World";
     buffer[11] = '\0';
     write(client_fd, buffer, 11);*/
@@ -134,6 +141,23 @@ void udpserver(void* arg){
 
 int main(void)
 {
+
+    Display *d;
+    int screen;
+           
+    d = XOpenDisplay(NULL);
+    if (d == NULL) {
+        fprintf(stderr, "Cannot open display\n");
+        exit(1);
+    }
+    screen = DefaultScreen(d);
+    Window w = XCreateSimpleWindow(d, RootWindow(d, screen), 0, 0, 1500, 1500, 1, BlackPixel(d, screen), WhitePixel(d, screen));
+
+    int child = fork();
+    if(child == 0){
+        udpserver(w);
+        return 0;
+    }
     int sockfd;
     struct addrinfo hints, *servinfo, *p;
     int rv;
@@ -181,10 +205,33 @@ int main(void)
     printf("listener: waiting to recvfrom...\n");
 
     addr_len = sizeof(their_addr);
+<<<<<<< HEAD:client/listener.c
+
+    /*Display * display = XOpenDisplay((char*) NULL);
+	Window parent;
+	int x, y;
+	int width, height;
+	int border_width, border, background;
+	Window w = XCreateSimpleWindow(&display, parent, x, y, width, height, border_width, border, background);
+    int width = 100;
+    int height = 100;
+    int depth = 32;
+    int bitmap_pad = 32;
+    int bytes_per_line = 0;
+    Display * display = XOpenDisplay(0);
+    if(display == NULL){
+        fprintf(stderr, "Cannot open display\n");
+        exit(1);
+    }
+        int screen = DefaultScreen(display);
+    Window w = XCreateSimpleWindow(display, RootWindow(display, screen), 10, 10, 100, 100, 1, BlackPixel(display, screen), WhitePixel(display, screen));
+    XSetWindowBackgroundPixmap(display, w, pixelmap);
+    XMapWindow(display, w);*/
 
     Display *d;
-    XEvent e;
-    char *msg = "Hello, World!";
+    Window w;
+    //XEvent e;
+    //char *msg = "Hello, World!";
     int screen;
            
     d = XOpenDisplay(NULL);
@@ -194,6 +241,8 @@ int main(void)
     }
     screen = DefaultScreen(d);
     w = XCreateSimpleWindow(d, RootWindow(d, screen), 0, 0, 1500, 1500, 1, BlackPixel(d, screen), WhitePixel(d, screen));
+=======
+>>>>>>> 0773cfe696951cd53f7c0a31e58da074b3ae071d:client/finaltest.c
     XSelectInput(d, w, ExposureMask | KeyPressMask);
     XMapWindow(d, w);
                                
@@ -203,8 +252,6 @@ int main(void)
     im->data = malloc(im->bytes_per_line * height); 
     XInitImage(im);
     
-    pthread_t udp;
-    pthread_create(&udp, NULL,(void*) udpserver, NULL);
 
     while(1){ 
         if ((numbytes = recvfrom(sockfd, &buf, MAXBUFLEN-1 , 0,
@@ -216,7 +263,7 @@ int main(void)
             printf("didn't get the right number of bytes bruh\n");
             continue;
         }     
-        int ctr = 0;
+        //int ctr = 0;
         int xcoord;
         xcoord = buf.x;
         printf("xcoord %d\n", xcoord);
@@ -249,9 +296,12 @@ int main(void)
         buf[numbytes] = '\0';
         printf("listener: packet contains \"%s\"\n", buf);*/
     }
+    int status;
+    waitpid(child, &status, 0);
     close(sockfd);
-    pthread_join(udp, (void**)NULL);    
     XCloseDisplay(d);
     printf("closing\n");
     return 0;
 }
+
+
